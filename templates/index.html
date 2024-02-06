@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Sample</title>
+</head>
+
+<body>
+
+    <h1>Chat Sample</h1>
+
+    <form id="form">
+        <h2>Input</h2>
+        <input type="text" id="input">
+        <button type="submit" name="button">Submit</button>
+    </form>
+    
+    <div id="output"></div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <script type="text/javascript">
+    $(document).ready(function() {
+        $('#form').on('submit',function(e){
+            $.ajax({
+                    data : {
+                            input : $('#input').val(),
+                            },
+                    type : 'POST',
+                    url : '/'
+            })
+            .done(function(data){
+                
+                $('#output').text(data.output).show();
+            
+            });
+            e.preventDefault();
+        });
+    });
+    </script>
+    
+</body>
+</html>
