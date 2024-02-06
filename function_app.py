@@ -14,7 +14,10 @@ from logger import LOG, handle_error
 from es_client import ES_Client, textExpansion_Search, RetrieveESresults
 from llm import AzureOpenAi_Client, ChatCompletion, ChatCompletionStream, GeneratedResponse
 from text_normalizer import normalize_text
+from flask import Flask, jsonify, render_template, request
 
+app = Flask(__name__)
+print('running app')
 
 load_dotenv(find_dotenv())
 
@@ -32,89 +35,83 @@ system_prompt="-- You are an AI assistant which answers user's questions in a co
 messages = [{ "role": "system", "content": system_prompt }]
 
 
-app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+@app.route('/', methods=['GET','POST'])
+def index():
+    print('inside index function')
 
-@app.route(route="message")
-def message(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info('Python HTTP trigger function processed a request.')
+    if request.method == "POST":
 
-    question = req.params.get('question')
-    if not question:
-        try:
-            req_body = req.get_json()
-        except ValueError:
-            pass
-        else:
-            question = req_body.get('question')
-
-    if question:
-        if len(question) > 1:
-        
-            user_prompt = {
-                "role": "user",
-                "content": question
-                }
-
-            print('User Question Prompt:\n{0}'.format(user_prompt['content']))
-
-            messages.append(user_prompt)
-
-            # get top results from ES semantic search
-            top_hit_responses=RetrieveESresults(question, ES_INDEX, top_n_results)
-
-            final_result_set={}
-            if len(top_hit_responses)>0:
-                final_result_set['top_source']=top_hit_responses[0]['doc_id']
-                final_result_set['top_score']=top_hit_responses[0]['score']
-                final_result_set['top_answer']=top_hit_responses[0]['body']
-                final_result_set['second_best_source']=top_hit_responses[1]['doc_id']
-                final_result_set['second_best_score']=top_hit_responses[1]['score']
-                #print(type(final_result_set))
-                #print(final_result_set['top_answer'])
-                output_answer=normalize_text(final_result_set['top_answer'])
-                #print(output_answer)
+        # if input from ajax is a text value from a form input with id = input :::
+        question = request.form['input']
+        if not question:
+            try:
+                req_body = req.get_json()
+            except ValueError:
+                pass
             else:
-                output_answer='Greet the user. Ask the user how can you assist them with anything related to SNOW'
-                messages[1]['content']=''
-                final_result_set['top_source']=None
-                final_result_set['top_score']=None
+                question = req_body.get('question')
+    
+        if question:
+            if len(question) > 1:
+            
+                user_prompt = {
+                    "role": "user",
+                    "content": question
+                    }
+    
+                print('User Question Prompt:\n{0}'.format(user_prompt['content']))
+    
+                messages.append(user_prompt)
+    
+                # get top results from ES semantic search
+                top_hit_responses=RetrieveESresults(question, ES_INDEX, top_n_results)
+    
+                final_result_set={}
+                if len(top_hit_responses)>0:
+                    final_result_set['top_source']=top_hit_responses[0]['doc_id']
+                    final_result_set['top_score']=top_hit_responses[0]['score']
+                    final_result_set['top_answer']=top_hit_responses[0]['body']
+                    final_result_set['second_best_source']=top_hit_responses[1]['doc_id']
+                    final_result_set['second_best_score']=top_hit_responses[1]['score']
+                    #print(type(final_result_set))
+                    #print(final_result_set['top_answer'])
+                    output_answer=normalize_text(final_result_set['top_answer'])
+                    #print(output_answer)
+                else:
+                    output_answer='Greet the user. Ask the user how can you assist them with anything related to SNOW'
+                    messages[1]['content']=''
+                    final_result_set['top_source']=None
+                    final_result_set['top_score']=None
+    
+                # Create Assistant content for OpenAI
+                Assistant_Content={
+                    'role': 'assistant',
+                    'content': output_answer
+                    }
+    
+                print('ES semantic Search Result:\n{0}'.format(Assistant_Content['content']))
+    
+                messages.append(Assistant_Content)
+    
+                print(messages)
+    
+                OpenAIoutput=GeneratedResponse(messages,is_stream=False)
+                LOG.info('OpenAI Results::\n\t{0}'.format(str(OpenAIoutput)))
+    
+                # LOG.info('OpenAI Results::\n\tcontent:::\t{0}\n\tPrompt Tokens:::\t{1}\n\tOutput Tokens:::\t{2}'.format(OpenAIoutput['content'], OpenAIoutput['prompt_tokens'], OpenAIoutput['output_tokens']))
+                #print(response)
+    
+                ai_response={
+                                'output': OpenAIoutput['content'], 
+                                'source': final_result_set['top_source']
+                            }
 
-            # Create Assistant content for OpenAI
-            Assistant_Content={
-                'role': 'assistant',
-                'content': output_answer
-                }
-
-            print('ES semantic Search Result:\n{0}'.format(Assistant_Content['content']))
-
-            messages.append(Assistant_Content)
-
-            print(messages)
-
-            OpenAIoutput=GeneratedResponse(messages,is_stream=False)
-            LOG.info('OpenAI Results::\n\t{0}'.format(str(OpenAIoutput)))
-
-            # LOG.info('OpenAI Results::\n\tcontent:::\t{0}\n\tPrompt Tokens:::\t{1}\n\tOutput Tokens:::\t{2}'.format(OpenAIoutput['content'], OpenAIoutput['prompt_tokens'], OpenAIoutput['output_tokens']))
-            #print(response)
-
-            ai_response={
-                            'output': OpenAIoutput['content'], 
-                            'source': final_result_set['top_source']
-                        }
-
-            return func.HttpResponse(
-                                        json.dumps(ai_response),
-                                        status_code=200
-                                    )
+                return jsonify(ai_response)
                                     
     
-        return func.HttpResponse(
-                                    'Unable to identify any input..',
-                                    status_code=200
-                                )
+            return jsonify({'output' : 'Unable to identify any input..'})
         
-    else:
-        return func.HttpResponse(
-             "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response.",
-             status_code=200
-        )
+        else:
+            return jsonify({'output' : 'Unable to identify any input..'})
+            
+    return render_template('index.html')
