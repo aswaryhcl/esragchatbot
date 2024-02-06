@@ -115,3 +115,7 @@ def index():
             return jsonify({'output' : 'Unable to identify any input..'})
             
     return render_template('index.html')
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
