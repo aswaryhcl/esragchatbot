@@ -1,15 +1,11 @@
 
-import logging
+
 import openai
 from openai import AzureOpenAI
 import requests
 import json, os
-import traceback
 from dotenv import load_dotenv, find_dotenv
 from elasticsearch import Elasticsearch
-from langchain.memory import ElasticsearchChatMessageHistory
-# from langchain.vectorstores import ElasticsearchStore
-from langchain_community.vectorstores import ElasticsearchStore
 from logger import LOG, handle_error
 from es_client import ES_Client, textExpansion_Search, RetrieveESresults
 from llm import AzureOpenAi_Client, ChatCompletion, ChatCompletionStream, GeneratedResponse
@@ -29,8 +25,12 @@ top_n_results=os.getenv("top_n_results")
 print('LLM_TYPE: {0}'.format(LLM_TYPE))
 streaming=False
 
+import logging
+logging.basicConfig(
+    format="%(asctime)s - %(module)s - %(message)s", datefmt="%d-%b-%y %H:%M:%S", level=logging.WARN
+)
 
-system_prompt="-- You are an AI assistant which answers user's questions in a concise manner.\n-- Your job is to respond to the question strictly by reference to the Source, a passage of text you will be provided.\n-- If the response content contains pointers, then generate the response in pointers as well but in a concise manner.\n -- always answer in natural human way.\n --Always give concise answers.\n-- If you don't know the answer, just say that you don't know, don't try to make up an answer.\n -- Aim to answer queries using existing conversational context."
+system_prompt="-- You are an AI assistant which answers user's questions in a concise manner.\n-- Your job is to respond to the question strictly by reference to the Source, a passage of text you will be provided.\n-- If the response content contains pointers, then generate the response in pointers as well but in a concise manner.\n -- always answer in natural human way.\n --Always give concise answers.\n-- If you don't know the answer, just say that you don't know, don't try to make up an answer.\n -- Aim to answer queries using existing conversational context.\n -- DO NOT IGNORE URLs in response"
 
 messages = [{ "role": "system", "content": system_prompt }]
 
@@ -44,12 +44,7 @@ def index():
         # if input from ajax is a text value from a form input with id = input :::
         question = request.form['input']
         if not question:
-            try:
-                req_body = req.get_json()
-            except ValueError:
-                pass
-            else:
-                question = req_body.get('question')
+            return jsonify({'error' : 'Unable to identify any input..'})
     
         if question:
             if len(question) > 1:
